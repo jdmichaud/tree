@@ -8,14 +8,14 @@ const Counter = struct {
 pub fn walk(allocator: std.mem.Allocator, output: Output, options: Options, directory: []const u8, prefix: []const u8, level: u16, counter: *Counter) !void {
   if (level == 0) return;
 
-  var dir = std.fs.cwd().openIterableDir(directory, .{}) catch {
+  var dir = std.fs.cwd().openDir(directory, .{ .iterate = true }) catch {
     try std.io.getStdErr().writer().print("cannot open directory \"{s}\"", .{ directory });
     return;
   };
   defer dir.close();
 
   var it = dir.iterate();
-  var dirent_list = std.ArrayList(std.fs.IterableDir.Entry).init(allocator);
+  var dirent_list = std.ArrayList(std.fs.Dir.Entry).init(allocator);
   defer {
     for (dirent_list.items) |entry| {
       allocator.free(entry.name);
@@ -24,14 +24,14 @@ pub fn walk(allocator: std.mem.Allocator, output: Output, options: Options, dire
   }
   while (try it.next()) |entry| {
     if (entry.name[0] != '.') {
-      var dest = try allocator.alloc(u8, entry.name.len);
-      std.mem.copy(u8, dest, entry.name);
+      const dest = try allocator.alloc(u8, entry.name.len);
+      @memcpy(dest, entry.name);
       try dirent_list.append(.{ .name = dest, .kind = entry.kind });
     }
   }
 
-  std.mem.sort(std.fs.IterableDir.Entry, dirent_list.items, {}, struct {
-    fn f(_: void, a: std.fs.IterableDir.Entry, b: std.fs.IterableDir.Entry) bool {
+  std.mem.sort(std.fs.Dir.Entry, dirent_list.items, {}, struct {
+    fn f(_: void, a: std.fs.Dir.Entry, b: std.fs.Dir.Entry) bool {
       return std.mem.lessThan(u8, a.name, b.name);
     }
   }.f);
@@ -132,7 +132,7 @@ fn parse_ls_colors(allocator: std.mem.Allocator) !std.StringHashMap(FontDefiniti
     // We do use globbing, so we will ignore the * for now
     const start_index: u8 = if (key_value.items[0][0] == '*') 1 else 0;
     // A little gymnastic here allocate the key only if it does not exist yet
-    var getEntry = try map.getOrPut(key_value.items[0][start_index..]);
+    const getEntry = try map.getOrPut(key_value.items[0][start_index..]);
     if (!getEntry.found_existing) {
       getEntry.key_ptr.* = try allocator.dupe(u8, key_value.items[0][start_index..]);
     }
